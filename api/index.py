@@ -67,12 +67,19 @@ class HDHubBypass:
             "Accept-Language": "en-US,en;q=0.9",
         })
         self.curl_session = None
+        # Proxy provided by user
+        self.proxy = "http://vSRHawGqa:LYyvCqiYL@45.152.118.135:62738"
+        self.proxies = {"http": self.proxy, "https": self.proxy}
+        self.std_session.proxies.update(self.proxies)
 
     def _get_curl_session(self):
         if not self.curl_session:
             self.curl_session = curl_requests.Session()
             self.curl_session.impersonate = "chrome120"
-            self.curl_session.headers = self.std_session.headers.copy()
+            self.curl_session.proxies = self.proxies
+            # Copy headers but EXCLUDE User-Agent so curl_cffi generates the correct one for the fingerprint
+            headers = {k: v for k, v in self.std_session.headers.items() if k.lower() != "user-agent"}
+            self.curl_session.headers.update(headers)
         return self.curl_session
 
     def _get(self, url, headers=None, timeout=15):
