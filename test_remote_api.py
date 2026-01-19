@@ -53,7 +53,7 @@ def test_bypass():
 
 def test_bypass_all():
     url = f"{BASE_URL}/bypass_all"
-    target = "https://4khdhub.dad/are-you-here-movie-5381/"
+    target = "https://4khdhub.dad/love-through-a-prism-series-5331/"
     payload = {"url": target}
 
     log(f"Testing {url}...")

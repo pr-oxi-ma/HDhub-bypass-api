@@ -249,10 +249,17 @@ class HDHubScraper:
             if sn:
                 item["season"] = sn.group(1).strip()
 
-            # ALL gadgetsweb links
-            links = re.findall(r'href="(https://gadgetsweb\.xyz/\?id=[^"]+)"', part)
-            for i, lnk in enumerate(links):
-                item["links"][f"link_{i+1}"] = lnk
+            # ALL gadgetsweb links with host names
+            # Pattern: [Download HubCloud](url) or <a href="url">Download HubCloud</a>
+            link_pattern = re.findall(r'\[Download ([^\]]+)\]\((https://gadgetsweb\.xyz/\?id=[^)]+)\)', part)
+            if not link_pattern:
+                # Fallback: HTML anchor pattern
+                link_pattern = re.findall(r'href="(https://gadgetsweb\.xyz/\?id=[^"]+)"[^>]*>([^<]+)', part)
+                # Swap order for consistency (host, url)
+                link_pattern = [(host.replace("Download ", "").strip(), url) for url, host in link_pattern]
+
+            for i, (host, url) in enumerate(link_pattern):
+                item["links"][f"{host}"] = url
 
             if item["links"]:
                 items.append(item)
@@ -286,10 +293,53 @@ async def root():
         "message": "HDHub Bypass API",
         "endpoints": {
             "/scrape": "POST - Extract download links from page",
+            "/find": "POST - Find all gadgetsweb links with file info (quality, size, host)",
             "/bypass": "POST - Resolve gadgetsweb URL to direct link",
             "/bypass_all": "POST - Scrape and bypass all links"
         }
     }
+
+@app.post("/find")
+async def find_links(req: ScrapeRequest):
+    """Find all gadgetsweb links with detailed file info."""
+    try:
+        loop = asyncio.get_event_loop()
+        scraped = await loop.run_in_executor(executor, scraper.scrape_page, req.url)
+
+        # Flatten all links with file info
+        all_links = []
+
+        for item in scraped.get("batch", []):
+            for host, url in item.get("links", {}).items():
+                all_links.append({
+                    "category": "batch",
+                    "quality": item.get("quality", ""),
+                    "size": item.get("size", ""),
+                    "title": item.get("title", ""),
+                    "host": host,
+                    "url": url
+                })
+
+        for item in scraped.get("singles", []):
+            for host, url in item.get("links", {}).items():
+                all_links.append({
+                    "category": "episode",
+                    "quality": item.get("quality", ""),
+                    "size": item.get("size", ""),
+                    "title": item.get("title", ""),
+                    "episode": item.get("season", ""),
+                    "host": host,
+                    "url": url
+                })
+
+        return {
+            "title": scraped["title"],
+            "type": scraped["type"],
+            "total_links": len(all_links),
+            "links": all_links
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/scrape", response_model=ScrapeResponse)
 async def scrape_page(req: ScrapeRequest):
