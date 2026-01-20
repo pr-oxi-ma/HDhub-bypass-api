@@ -67,6 +67,12 @@ uvicorn api.index:app --reload --port 8000
 
 ## 📡 API Endpoints
 
+> 💡 **All endpoints support both GET and POST methods!**
+> - **GET**: Pass URL as query parameter → `?url=YOUR_URL`
+> - **POST**: Send JSON body → `{"url": "YOUR_URL"}`
+
+---
+
 ### 🏠 Root
 ```http
 GET /
@@ -75,14 +81,47 @@ Returns API info & available endpoints.
 
 ---
 
+### 🔍 Find Links (NEW!)
+Extracts all download links with quality, size, and host info.
+
+```http
+# GET Method (browser-friendly! 🌐)
+GET /find?url=https://4khdhub.dad/some-movie-page/
+
+# POST Method
+POST /find
+{"url": "https://4khdhub.dad/some-movie-page/"}
+```
+
+**Response:**
+```json
+{
+  "title": "Movie Name",
+  "type": "movie",
+  "total_links": 6,
+  "links": [
+    {
+      "category": "batch",
+      "quality": "1080p",
+      "size": "2.5 GB",
+      "title": "Movie.2024.1080p.mkv",
+      "host": "HubCloud",
+      "url": "https://gadgetsweb.xyz/?id=..."
+    }
+  ]
+}
+```
+
+---
+
 ### 🎬 Scrape Page
 ```http
-POST /scrape
-Content-Type: application/json
+# GET Method
+GET /scrape?url=https://4khdhub.dad/some-movie-page/
 
-{
-  "url": "https://4khdhub.dad/some-movie-page/"
-}
+# POST Method
+POST /scrape
+{"url": "https://4khdhub.dad/some-movie-page/"}
 ```
 
 **Response:**
@@ -99,12 +138,12 @@ Content-Type: application/json
 
 ### 🔓 Bypass Single Link
 ```http
-POST /bypass
-Content-Type: application/json
+# GET Method
+GET /bypass?url=https://gadgetsweb.xyz/?id=...
 
-{
-  "url": "https://gadgetsweb.xyz/?id=..."
-}
+# POST Method
+POST /bypass
+{"url": "https://gadgetsweb.xyz/?id=..."}
 ```
 
 **Response:**
@@ -120,12 +159,12 @@ Content-Type: application/json
 
 ### ⚡ Bypass All Links
 ```http
-POST /bypass_all
-Content-Type: application/json
+# GET Method
+GET /bypass_all?url=https://4khdhub.dad/some-movie/
 
-{
-  "url": "https://4khdhub.dad/some-movie/"
-}
+# POST Method
+POST /bypass_all
+{"url": "https://4khdhub.dad/some-movie/"}
 ```
 
 Scrapes the page **AND** bypasses all found links in one call! 🔥

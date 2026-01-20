@@ -2,10 +2,17 @@
 HDHub Bypass API
 ================
 
+All endpoints support GET (with ?url=...) and POST (with JSON body).
+
 Endpoints:
-  POST /scrape   - Extract all download links from a movie/series page
-  POST /bypass   - Resolve a gadgetsweb link to final direct download URL
-  POST /bypass_all - Scrape and bypass all links
+  GET/POST /scrape     - Extract all download links from a movie/series page
+  GET/POST /find       - Find all gadgetsweb links with file info (quality, size, host)
+  GET/POST /bypass     - Resolve a gadgetsweb link to final direct download URL
+  GET/POST /bypass_all - Scrape and bypass all links
+
+Examples:
+  GET  /find?url=https://4khdhub.dad/your-movie/
+  POST /find  {"url": "https://4khdhub.dad/your-movie/"}
 
 Usage:
   uvicorn api:app --reload --port 8000
@@ -311,14 +318,127 @@ executor = ThreadPoolExecutor(max_workers=5)
 @app.get("/")
 async def root():
     return {
-        "message": "HDHub Bypass API",
+        "message": "🎬 HDHub Bypass API 🔥",
         "endpoints": {
-            "/scrape": "POST - Extract download links from page",
-            "/find": "POST - Find all gadgetsweb links with file info (quality, size, host)",
-            "/bypass": "POST - Resolve gadgetsweb URL to direct link",
-            "/bypass_all": "POST - Scrape and bypass all links"
-        }
+            "/scrape": "GET/POST - Extract download links from page (use ?url=... for GET)",
+            "/find": "GET/POST - Find all gadgetsweb links with file info (use ?url=... for GET)",
+            "/bypass": "GET/POST - Resolve gadgetsweb URL to direct link (use ?url=... for GET)",
+            "/bypass_all": "GET/POST - Scrape and bypass all links (use ?url=... for GET)"
+        },
+        "example": "/find?url=https://4khdhub.dad/your-movie-page/"
     }
+
+# =====================
+# GET ENDPOINTS (URL as query param)
+# =====================
+
+@app.get("/find")
+async def find_links_get(url: str):
+    """Find all gadgetsweb links with detailed file info (GET method)."""
+    try:
+        loop = asyncio.get_event_loop()
+        scraped = await loop.run_in_executor(executor, scraper.scrape_page, url)
+
+        all_links = []
+        for item in scraped.get("batch", []):
+            for host, link_url in item.get("links", {}).items():
+                all_links.append({
+                    "category": "batch",
+                    "quality": item.get("quality", ""),
+                    "size": item.get("size", ""),
+                    "title": item.get("title", ""),
+                    "host": host,
+                    "url": link_url
+                })
+
+        for item in scraped.get("singles", []):
+            for host, link_url in item.get("links", {}).items():
+                all_links.append({
+                    "category": "episode",
+                    "quality": item.get("quality", ""),
+                    "size": item.get("size", ""),
+                    "title": item.get("title", ""),
+                    "episode": item.get("season", ""),
+                    "host": host,
+                    "url": link_url
+                })
+
+        return {
+            "title": scraped["title"],
+            "type": scraped["type"],
+            "total_links": len(all_links),
+            "links": all_links
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/scrape")
+async def scrape_page_get(url: str):
+    """Extract download links from page (GET method)."""
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(executor, scraper.scrape_page, url)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bypass")
+async def bypass_link_get(url: str):
+    """Resolve gadgetsweb URL to direct link (GET method)."""
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(executor, bypasser.bypass_gadgetsweb, url)
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bypass_all")
+async def bypass_all_links_get(url: str):
+    """Scrape and bypass all links (GET method)."""
+    try:
+        loop = asyncio.get_event_loop()
+        scraped = await loop.run_in_executor(executor, scraper.scrape_page, url)
+
+        results = {
+            "title": scraped["title"],
+            "type": scraped["type"],
+            "batch": [],
+            "singles": []
+        }
+
+        async def bypass_item(item, cat):
+            bypassed = {"info": item, "direct_links": {}}
+            for name, link_url in item.get("links", {}).items():
+                try:
+                    r = await loop.run_in_executor(executor, bypasser.bypass_gadgetsweb, link_url)
+                    bypassed["direct_links"][name] = r.get("final_url")
+                except:
+                    bypassed["direct_links"][name] = None
+            return cat, bypassed
+
+        tasks = []
+        for item in scraped.get("batch", []):
+            tasks.append(bypass_item(item, "batch"))
+        for item in scraped.get("singles", []):
+            tasks.append(bypass_item(item, "singles"))
+
+        if tasks:
+            done = await asyncio.gather(*tasks)
+            for cat, bypassed in done:
+                results[cat].append(bypassed)
+
+        return results
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =====================
+# POST ENDPOINTS (JSON body)
+# =====================
 
 @app.post("/find")
 async def find_links(req: ScrapeRequest):
